@@ -143,23 +143,19 @@ class RateReturnOnly(NoModifier):
     self.lastdata = None
     # =['adjclose', 'volume', 'open', 'high', 'low']
 
-  def change_prep(self, pdata):
-        pdata.ticker_data_filename += f"-w{self.name}"
-        pdata.data_prefix += f"-w{self.name}"
-  
   def change_data(self, data):
     self.lastdata = data
     sdata = data.rolling(window=200, min_periods=1).mean()
 
     # only use last 5 years data
     newdata = data.copy(deep=True).tail(1000)
-    newdata['adjclose'] = (data['adjclose']-sdata['adjclose'])/sdata['adjclose']
-    newdata['volume'] = (data['volume']-sdata['volume'])/sdata['volume']
-    newdata['open'] = data['open']/data['adjclose']
-    newdata['high'] = data['high']/data['adjclose']-1
-    newdata['low'] = 1-data['low']/data['adjclose']
-    newdata['close'] =  data['close']/data['adjclose']
-    newdata['ticker'] = data['ticker']
+    # newdata['adjclose'] = (data['adjclose']-sdata['adjclose'])/sdata['adjclose']
+    # newdata['volume'] = (data['volume']-sdata['volume'])/sdata['volume']
+    # newdata['open'] = data['open']/data['adjclose']
+    # newdata['high'] = data['high']/data['adjclose']-1
+    # newdata['low'] = 1-data['low']/data['adjclose']
+    # newdata['close'] =  data['close']/data['adjclose']
+    # newdata['ticker'] = data['ticker']
     newdata.dropna(inplace=True)
 
     if self.next is None:
@@ -168,6 +164,8 @@ class RateReturnOnly(NoModifier):
       return self.next.change_data(newdata)
 
   def change_prep(self, pdata):
+    pdata.ticker_data_filename += f"-w{self.name}"
+    pdata.data_prefix += f"-w{self.name}"
     if self.lastdata is not None:
       pdata.lastref = self.lastdata.rolling(window=200, min_periods=1).mean().tail(1).adjclose.item()
       pdata.lastprice = self.lastdata.tail(1).adjclose.item()
