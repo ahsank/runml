@@ -185,12 +185,12 @@ class TradingResult:
 
     def eval(self, trade):
         # evaluate the model
-        loss, mae = self.model.evaluate(self.data["X_test"], self.data["y_test"], verbose=0)
+        loss, merr = self.model.evaluate(self.data["X_test"], self.data["y_test"], verbose=0)
         # calculate the mean absolute error (inverse scaling)
         if self.pdata.SCALE:
-            self.mean_absolute_error = self.data["column_scaler"]["adjclose"].inverse_transform([[mae]])[0][0]
+            self.mean_error = self.data["column_scaler"]["adjclose"].inverse_transform([[merr]])[0][0]
         else:
-            self.mean_absolute_error = mae
+            self.mean_error = merr
             
         # get the final dataframe for the testing set
         final_df = get_final_df(self.model, self.data, self.pdata.SCALE, self.pdata.LOOKUP_STEP, trade)
@@ -213,7 +213,7 @@ class TradingResult:
         print(f"Ticker {self.pdata.ticker}")
         print(f"Future price after {self.pdata.LOOKUP_STEP} days is {self.future_price:.2f}$")
         print(f"{self.LOSSN}_loss:", self.loss)
-        print("Mean Absolute Error:", self.mean_absolute_error)
+        print("Mean Error:", self.mean_error)
         print("Accuracy score:", self.accuracy_score)
         print("Total buy profit:", self.total_buy_profit)
         print("Total sell profit:", self.total_sell_profit)
@@ -267,9 +267,10 @@ def fetch_data(ticker):
         raise TypeError("ticker can be either a str or a `pd.DataFrame` instances")
     return df
 
+LOSS_TYPE = "mean_absolute_error"
 
 def create_model(sequence_length, n_features, units=256, cell=LSTM, n_layers=2, dropout=0.3,
-                loss="mean_absolute_error", optimizer="rmsprop", bidirectional=False):
+                loss=LOSS_TYPE, optimizer="rmsprop", bidirectional=False):
     model = Sequential()
     for i in range(n_layers):
         if i == 0:
