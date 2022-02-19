@@ -145,17 +145,8 @@ class RateReturnOnly(NoModifier):
 
   def change_data(self, data):
     self.lastdata = data
-    sdata = data.rolling(window=200, min_periods=1).mean()
-
     # only use last 5 years data
     newdata = data.copy(deep=True).tail(1000)
-    # newdata['adjclose'] = (data['adjclose']-sdata['adjclose'])/sdata['adjclose']
-    # newdata['volume'] = (data['volume']-sdata['volume'])/sdata['volume']
-    # newdata['open'] = data['open']/data['adjclose']
-    # newdata['high'] = data['high']/data['adjclose']-1
-    # newdata['low'] = 1-data['low']/data['adjclose']
-    # newdata['close'] =  data['close']/data['adjclose']
-    # newdata['ticker'] = data['ticker']
     newdata.dropna(inplace=True)
 
     if self.next is None:
@@ -167,9 +158,8 @@ class RateReturnOnly(NoModifier):
     pdata.ticker_data_filename += f"-w{self.name}"
     pdata.data_prefix += f"-w{self.name}"
     if self.lastdata is not None:
-      pdata.lastref = self.lastdata.rolling(window=200, min_periods=1).mean().tail(1).adjclose.item()
       pdata.lastprice = self.lastdata.tail(1).adjclose.item()
-      print(f"{pdata.ticker} \t MA: {pdata.lastref:.2f}, \t Price: {pdata.lastprice:.2f}")
+      print(f"{pdata.ticker} \t Price: {pdata.lastprice:.2f}")
 
     if self.next is not None:
       self.next.change_prep(pdata)
@@ -180,14 +170,11 @@ class RateReturnOnly(NoModifier):
       self.next.change_model(mod)
  
   def predicted_price(self, pdata, res):
-    return pdata.lastref * (1 + res.future_price)
+    return res.future_price
   
   def predicted_gain(self, pdata, res):
     return self.predicted_price(pdata, res)/pdata.lastprice-1
 
-  def get_predict(self, data, future_price):
-      print(f"Last 200 dma {self.lastref}")
-      print(f"Future price {self.predicted_price(res)}")
 
 def runModelCombined(tickers, name, modifier, do_train=True, trading=NormalTrading):
   genpdata = PreparedData(name)

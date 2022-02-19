@@ -6,7 +6,7 @@
 from setuptools import setup
 
 setup(name='runml',
-      version='0.0.1',
+      version='0.0.2',
       description='Run Machine learning tensorflow model to predict sequence',
       url='https://github.com/ahsank/runml',
       author='Ahsan Khan',
