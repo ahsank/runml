@@ -42,6 +42,20 @@ class AddDay(NoModifier):
         df = data.apply(lambda row: row.date.timetuple().tm_yday, axis = 1)
         return df.to_frame('day').join(data)
 
+
+class AddVWap(NoModifier):
+    def change_prep(self, pdata):
+        pdata.FEATURE_COLUMNS = pdata.FEATURE_COLUMNS + ['vwap']
+        pdata.ticker_data_filename += '-wvwap'
+        pdata.data_prefix += '-wvwap'
+        pass
+
+
+    def change_data(self, data):
+
+        df = data.apply(lambda row: row.adjclose * row.volume, axis = 1)
+        return df.to_frame('vwap').join(data)
+
 class AddDayMonth(NoModifier):
     def __init__(self):
       self.name = 'DayMon'
