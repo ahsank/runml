@@ -176,7 +176,7 @@ class RateReturnOnly(NoModifier):
     return self.predicted_price(pdata, res)/pdata.lastprice-1
 
 
-def runModelCombined(tickers, name, modifier, do_train=True, trading=NormalTrading):
+def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", trading=NormalTrading):
   genpdata = PreparedData(name)
   genpdata.data = {}
   modifier.change_prep(genpdata)
@@ -194,7 +194,7 @@ def runModelCombined(tickers, name, modifier, do_train=True, trading=NormalTradi
     pdatas.append(pdata)
     modifier.change_prep(pdata)
     pdata.prepare(data)
-    mod = RNNModel()
+    mod = RNNModel(loss=loss)
     modifier.change_model(mod)
     mod.create(genpdata)
 

@@ -267,10 +267,8 @@ def fetch_data(ticker):
         raise TypeError("ticker can be either a str or a `pd.DataFrame` instances")
     return df
 
-LOSS_TYPE = "mean_absolute_error"
-
 def create_model(sequence_length, n_features, units=256, cell=LSTM, n_layers=2, dropout=0.3,
-                loss=LOSS_TYPE, optimizer="rmsprop", bidirectional=False):
+                loss="mean_absolute_error", optimizer="rmsprop", bidirectional=False):
     model = Sequential()
     for i in range(n_layers):
         if i == 0:
@@ -305,7 +303,7 @@ from tensorflow.keras.layers import LSTM
 EPOCHS = 20
 
 class RNNModel:
-    def __init__(self):
+    def __init__(self, loss="huber_loss"):
         self.date_now = time.strftime("%Y-%m-%d")
         ### model parameters
         self.N_LAYERS = 2
@@ -321,7 +319,7 @@ class RNNModel:
         # mean absolute error loss
         # LOSS = "mae"
         # huber loss
-        self.LOSS = "huber_loss"
+        self.LOSS = loss
         self.OPTIMIZER = "adam"
         self.BATCH_SIZE = 64
         self.EPOCHS = EPOCHS # 500
