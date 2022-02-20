@@ -109,12 +109,12 @@ class AddMA(NoModifier):
         pdata.data_prefix += f"-w{self.colname}"
   
   def change_data(self, data):
-      df = (data[self.col]
-            .rolling(window=self.period)
-            .mean()
-            .to_frame(self.colname)
-            .dropna())
-      return df.join(data)
+    df = (data[self.col]
+          .rolling(window=self.period, min_periods=1)
+          .mean()
+          .to_frame(self.colname))
+#          .dropna()
+    return df.join(data)
 
 class CropData(NoModifier):
     def __init__(self, num):
@@ -173,7 +173,8 @@ class RateReturnOnly(NoModifier):
     pdata.data_prefix += f"-w{self.name}"
     if self.lastdata is not None:
       pdata.lastprice = self.lastdata.tail(1).adjclose.item()
-      print(f"{pdata.ticker} \t Price: {pdata.lastprice:.2f}")
+      if IS_VERBOSE:
+          print(f"{pdata.ticker} \t Price: {pdata.lastprice:.2f}")
 
     if self.next is not None:
       self.next.change_prep(pdata)
@@ -189,6 +190,8 @@ class RateReturnOnly(NoModifier):
   def predicted_gain(self, pdata, res):
     return self.predicted_price(pdata, res)/pdata.lastprice-1
 
+
+IS_VERBOSE = False
 
 def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", trading=NormalTrading):
   genpdata = PreparedData(name)
@@ -214,7 +217,8 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
 
     if  do_train:
       if 'X_train' in genpdata.data:
-        print(f"Adding {pdata.ticker} {pdata.data['X_train'].shape}")
+        if IS_VERBOSE:
+            print(f"Adding {pdata.ticker} {pdata.data['X_train'].shape}")
         genpdata.data['X_train'] = np.concatenate((genpdata.data['X_train'], pdata.data['X_train']))
         genpdata.data['y_train'] = np.concatenate((genpdata.data['y_train'], pdata.data['y_train']))
         genpdata.data['X_test'] = np.concatenate((genpdata.data['X_test'], pdata.data['X_test']))
@@ -233,15 +237,20 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
 
 
   df = getStatFrame()
+  results = {}
 
   for pdata in pdatas:
     res = TradingResult(mod.model, pdata, mod.LOSS)
+    results[pdata.ticker] = res
     res.eval(trading)
-    res.print()
+    if IS_VERBOSE:
+        res.print()
     modifier.print(res)
     df = df.append(
         {'Ticker': pdata.ticker,
          'Name': modifier.name,
+         'Error': res.mean_error,
+         'Accuracy': res.accuracy_score,
          'Buy': round(res.total_buy_profit,2),
          'Sell': round(res.total_sell_profit,2),
          'Total': round(res.total_profit,2),
@@ -250,5 +259,5 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
          'Gain': round(modifier.predicted_gain(pdata, res),2)
          }, ignore_index=True)
 
-  return df
+  return df, results
 

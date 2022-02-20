@@ -194,6 +194,7 @@ class TradingResult:
             
         # get the final dataframe for the testing set
         final_df = get_final_df(self.model, self.data, self.pdata.SCALE, self.pdata.LOOKUP_STEP, trade)
+        
         # predict the future price
         self.future_price = self.predict()
         # we calculate the accuracy by counting the number of positive profits
@@ -207,6 +208,7 @@ class TradingResult:
         self.profit_per_trade = self.total_profit / len(final_df)
         self.final_df = final_df
         self.loss = loss
+        self.final_df = final_df
 
     def print(self):
         # printing metrics
