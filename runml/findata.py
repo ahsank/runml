@@ -44,15 +44,7 @@ def load_data(ticker, n_steps=50, scale=True, shuffle=True, lookup_step=1, split
         test_size (float): ratio for test data, default is 0.2 (20% testing data)
         feature_columns (list): the list of features to use to feed into the model, default is everything grabbed from yahoo_fin
     """
-    # see if ticker is already a loaded stock from yahoo finance
-    if isinstance(ticker, str):
-        # load it from yahoo_fin library
-        df = si.get_data(ticker)
-    elif isinstance(ticker, pd.DataFrame):
-        # already loaded, use it directly
-        df = ticker
-    else:
-        raise TypeError("ticker can be either a str or a `pd.DataFrame` instances")
+    df = fetch_data(ticker)
     # this will contain all the elements we want to return from this function
     result = {}
     # we will also return the original dataframe itself
@@ -262,6 +254,8 @@ def fetch_data(ticker):
     if isinstance(ticker, str):
         # load it from yahoo_fin library
         df = si.get_data(ticker)
+        # Remove duplicates
+        df = df[~df.index.duplicated(keep='first')]
     elif isinstance(ticker, pd.DataFrame):
         # already loaded, use it directly
         df = ticker
