@@ -213,13 +213,15 @@ class TradingResult:
         print("Total sell profit:", self.total_sell_profit)
         print("Total profit:", self.total_profit)
         print("Profit per trade:", self.profit_per_trade)
-        
+
+G_LOOKUP_STEP = 15
+
 class PreparedData:
     def __init__(self, ticker):
         # Window size or the sequence length
         self.N_STEPS = 50
 	# Lookup step, 1 is the next day
-        self.LOOKUP_STEP = 15
+        self.LOOKUP_STEP = G_LOOKUP_STEP
         # whether to scale feature columns & output price as well
         self.SCALE = True
         self.scale_str = f"sc-{int(self.SCALE)}"
