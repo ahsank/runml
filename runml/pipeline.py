@@ -4,8 +4,20 @@ import pandas as pd
 from .findata import PreparedData, fetch_data, RNNModel, TradingResult
 
 class NormalTrading:
-    buy_profit  = lambda current, pred_future, true_future: true_future - current if pred_future > current else 0
-    sell_profit = lambda current, pred_future, true_future: current - true_future if pred_future < current else 0
+  name = 'Normal'
+  buy_profit  = lambda row : row.true_adjclose - row.adjclose if row.pred_adjclose > row.adjclose else 0
+  sell_profit = lambda row: row.adjclose - row.true_adjclose if row.pred_adjclose < row.adjclose else 0
+
+class LowTrading:
+  name = 'Low'
+  buy_profit  = lambda row :  row.true_adjclose - row.pred_low if row.true_low <= row.pred_low else 0
+  sell_profit = lambda row: 0 # row.adjclose - row.true_adjclose if row.pred_low > row.true_low else row.adjclose - row.pred_low 
+
+class HighTrading:
+  name = 'High'
+  sell_profit  = lambda row: -row.true_adjclose + row.pred_high if row.true_high >= row.pred_high else 0
+  buy_profit = lambda row: 0 # -row.adjclose + row.true_adjclose if row.pred_high > row.true_high else -row.adjclose + row.pred_high 
+
 
 class NoModifier:
     name = 'Original'
@@ -116,6 +128,21 @@ class AddMA(NoModifier):
 #          .dropna()
     return df.join(data)
 
+class Adj(NoModifier):
+  def __init__(self, cols=['low', 'high']):
+    self.colname = f"adj"
+    self.cols = cols
+    self.name = self.colname
+
+  def change_prep(self, pdata):
+    pdata.ticker_data_filename += f"-w{self.colname}"
+    pdata.data_prefix += f"-w{self.colname}"
+  
+  def change_data(self, data):
+    for col in self.cols:
+      data[col] += (- data.close + data.adjclose)
+    return data
+
 class CropData(NoModifier):
     def __init__(self, num):
       self.num = num
@@ -193,8 +220,8 @@ class RateReturnOnly(NoModifier):
 
 IS_VERBOSE = False
 
-def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", trading=NormalTrading):
-  genpdata = PreparedData(name)
+def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", output='adjclose', trading=NormalTrading):
+  genpdata = PreparedData(name, output)
   genpdata.data = {}
   modifier.change_prep(genpdata)
   pdatas = []
@@ -207,7 +234,7 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
   for ticker in tickers:
     data = fetch_data(ticker)
     data = modifier.change_data(data)
-    pdata = PreparedData(ticker)
+    pdata = PreparedData(ticker, output)
     pdatas.append(pdata)
     modifier.change_prep(pdata)
     pdata.prepare(data)
@@ -237,16 +264,18 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
 
 
   df = getStatFrame()
+  rows = []
   results = {}
 
   for pdata in pdatas:
     res = TradingResult(mod.model, pdata, mod.LOSS)
     results[pdata.ticker] = res
-    res.eval(trading)
+    res.eval()
+    res.do_trade(trading)
     if IS_VERBOSE:
         res.print()
     modifier.print(res)
-    df = df.append(
+    rows.append(
         {'Ticker': pdata.ticker,
          'Name': modifier.name,
          'Error': res.mean_error,
@@ -257,7 +286,21 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
          'Last': round(pdata.lastprice,2),
          'Predicted': round(modifier.predicted_price(pdata, res),2),
          'Gain': round(modifier.predicted_gain(pdata, res),2)
-         }, ignore_index=True)
+         })
 
-  return df, results
+  return pd.DataFrame(rows), results
+
+# Add adjhigh, adjlow
+# Train for them
+
+def runModelCombinedVola(tickers, name, modifier, do_train=True, loss="huber_loss"):
+  dfs = []
+  trading = {'adjclose' : NormalTrading, 'high' : HighTrading, 'low' : LowTrading }
+  for col, cls in trading.items():
+    df, results = runModelCombined(tickers, name, modifier, do_train, loss, col, cls)
+    df["Col"] = col
+    dfs.append(df)
+
+  finaldf = pd.concat(dfs)
+  return finaldf.set_index(['Ticker', 'Col']);
 
