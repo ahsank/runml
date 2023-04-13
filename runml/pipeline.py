@@ -11,17 +11,17 @@ class NormalTrading:
 class LowTrading:
   name = 'Low'
   buy_profit  = lambda row :  row.true_adjclose - row.pred_low if row.true_low <= row.pred_low else 0
-  sell_profit = lambda row: 0 # row.adjclose - row.true_adjclose if row.pred_low > row.true_low else row.adjclose - row.pred_low 
+  sell_profit = lambda row: row.adjclose - row.true_adjclose if row.pred_low > row.true_low else row.adjclose - row.pred_low
 
 class HighTrading:
   name = 'High'
-  sell_profit  = lambda row: -row.true_adjclose + row.pred_high if row.true_high >= row.pred_high else 0
-  buy_profit = lambda row: 0 # -row.adjclose + row.true_adjclose if row.pred_high > row.true_high else -row.adjclose + row.pred_high 
+  sell_profit  = lambda row:  row.pred_high-row.true_adjclose if row.true_high >= row.pred_high else 0
+  buy_profit = lambda row: row.true_adjclose-row.adjclose  if row.pred_high < row.true_high else row.pred_high-row.adjclose
 
 
 class NoModifier:
     name = 'Original'
-    
+
     def change_prep(self, pdata):
         pass
 
@@ -38,7 +38,7 @@ class NoModifier:
 class AddDay(NoModifier):
     def __init__(self):
         self.name = 'Day'
-    
+
     def change_prep(self, pdata):
         pdata.FEATURE_COLUMNS = pdata.FEATURE_COLUMNS + ['day']
         pdata.ticker_data_filename += '-withday'
@@ -71,7 +71,7 @@ class AddVWap(NoModifier):
 class AddDayMonth(NoModifier):
     def __init__(self):
       self.name = 'DayMon'
-    
+
     def change_prep(self, pdata):
         pdata.FEATURE_COLUMNS = pdata.FEATURE_COLUMNS + ['mday', 'month']
         pdata.ticker_data_filename += '-wdm'
@@ -88,11 +88,11 @@ class AddDayMonth(NoModifier):
         dfm = data.apply(lambda row: row.date.timetuple().tm_mon, axis = 1)
         df = dfd.to_frame('mday').join(data)
         return dfm.to_frame('month').join(df)
-            
+
 
 def getStatFrame():
     return pd.DataFrame(columns=['Ticker', 'Name', 'Buy', 'Sell', 'Total'])
-    
+
 def runTicker(ticker, models = [NoModifier], df=getStatFrame()):
     for model in models:
         prepare()
@@ -119,7 +119,7 @@ class AddMA(NoModifier):
         pdata.FEATURE_COLUMNS = pdata.FEATURE_COLUMNS + [self.colname]
         pdata.ticker_data_filename += f"-w{self.colname}"
         pdata.data_prefix += f"-w{self.colname}"
-  
+
   def change_data(self, data):
     df = (data[self.col]
           .rolling(window=self.period, min_periods=1)
@@ -137,7 +137,7 @@ class Adj(NoModifier):
   def change_prep(self, pdata):
     pdata.ticker_data_filename += f"-w{self.colname}"
     pdata.data_prefix += f"-w{self.colname}"
-  
+
   def change_data(self, data):
     for col in self.cols:
       data[col] += (- data.close + data.adjclose)
@@ -154,14 +154,14 @@ class CropData(NoModifier):
 class FeatureSeq(NoModifier):
   def __init__(self, classes):
     self.name = 'seq'
-    self.modifiers = classes 
+    self.modifiers = classes
     for cls in classes:
       self.name += cls.name
-    
+
   def change_prep(self, pdata):
     for cls in self.modifiers:
       cls.change_prep(pdata)
-    
+
   def change_model(self, mod):
     for obj in self.modifiers:
       obj.change_model(mod)
@@ -206,14 +206,14 @@ class RateReturnOnly(NoModifier):
     if self.next is not None:
       self.next.change_prep(pdata)
 
-    
+
   def change_model(self, mod):
     if self.next is not None:
       self.next.change_model(mod)
- 
+
   def predicted_price(self, pdata, res):
     return res.future_price
-  
+
   def predicted_gain(self, pdata, res):
     return self.predicted_price(pdata, res)/pdata.lastprice-1
 
@@ -303,4 +303,3 @@ def runModelCombinedVola(tickers, name, modifier, do_train=True, loss="huber_los
 
   finaldf = pd.concat(dfs)
   return finaldf.set_index(['Ticker', 'Col']);
-

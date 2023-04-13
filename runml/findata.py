@@ -39,7 +39,7 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
         scale (bool): whether to scale prices from 0 to 1, default is True
         shuffle (bool): whether to shuffle the dataset (both training & testing), default is True
         lookup_step (int): the future lookup step to predict, default is 1 (e.g next day)
-        split_by_date (bool): whether we split the dataset into training/testing by date, setting it 
+        split_by_date (bool): whether we split the dataset into training/testing by date, setting it
             to False will split datasets in a random way
         test_size (float): ratio for test data, default is 0.2 (20% testing data)
         feature_columns (list): the list of features to use to feed into the model, default is everything grabbed from yahoo_fin
@@ -47,10 +47,12 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
     df = fetch_data(ticker)
     # this will contain all the elements we want to return from this function
     result = {}
+    # we will also return the original dataframe itself
     origdf = df.copy()
+    # Also save unscaled future adjclose as it's needed for example high low based trading
     origdf['unscaled_future_adjclose'] = origdf['adjclose'].shift(-lookup_step)
     result['df'] = origdf.copy()
-    
+
     # make sure that the passed feature_columns exist in the dataframe
     for col in feature_columns:
         assert col in df.columns, f"'{col}' does not exist in the dataframe."
@@ -66,11 +68,11 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
             column_scaler[column] = scaler
         # add the MinMaxScaler instances to the result returned
         result["column_scaler"] = column_scaler
-    # add the target column (label) by shifting by `lookup_step`
+    # add some  target column (label) by shifting by `lookup_step`
     df['future_adjclose'] = df['adjclose'].shift(-lookup_step)
     df['future_low'] = df['low'].rolling(lookup_step).min().shift(-lookup_step)
     df['future_high'] = df['high'].rolling(lookup_step).max().shift(-lookup_step)
-    # we will also return the original dataframe itself
+    # training output column
     future_column = f"future_{output_column}"
 
     # last `lookup_step` columns contains NaN in future column
@@ -110,7 +112,7 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
             # shuffle the datasets for training (if shuffle parameter is set)
             shuffle_in_unison(result["X_train"], result["y_train"])
             shuffle_in_unison(result["X_test"], result["y_test"])
-    else:    
+    else:
         # split the dataset randomly
         result["X_train"], result["X_test"], result["y_train"], result["y_test"] = train_test_split(X, y, test_size=test_size, shuffle=shuffle)
     # get the list of test set dates
@@ -126,8 +128,8 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
 
 def get_final_df(model, data, scale, lookup_step, output_column):
     """
-    This function takes the `model` and `data` dict to 
-    construct a final dataframe that includes the features along 
+    This function takes the `model` and `data` dict to
+    construct a final dataframe that includes the features along
     with true and predicted prices of the testing dataset
     """
     X_test = data["X_test"]
@@ -165,20 +167,6 @@ def apply_trade(final_df, lookup_step, trade):
     final_df["sell_profit"] = list(final_df.apply(trade.sell_profit, axis=1)
                                     # since we don't have profit for last sequence, add 0's
                                     )
-    # final_df["buy_profit"] = list(map(trade.buy_profit, 
-    #                                 final_df[output_column], 
-    #                                 final_df[f"{output_column}_{lookup_step}"], 
-    #                                 final_df[f"true_{output_column}_{lookup_step}"])
-    #                                 # since we don't have profit for last sequence, add 0's
-    #                                 )
-    # # add the sell profit column
-    # final_df["sell_profit"] = list(map(trade.sell_profit, 
-    #                                 final_df[output_column], 
-    #                                 final_df[f"{output_column}_{lookup_step}"], 
-    #                                 final_df[f"true_{output_column}_{lookup_step}"])
-    #                                 # since we don't have profit for last sequence, add 0's
-    #                                 )
-
     return final_df
 
 class TradingResult:
@@ -188,7 +176,7 @@ class TradingResult:
         self.data = prepdata.data
         self.output_column = prepdata.OUTPUT_COLUMN
         self.LOSSN = lossn
-        
+
     def predict(self):
         # retrieve the last sequence from data
         last_sequence = self.data["last_sequence"][-self.pdata.N_STEPS:]
@@ -211,7 +199,7 @@ class TradingResult:
             self.mean_error = self.data["column_scaler"][self.output_column].inverse_transform([[merr]])[0][0]
         else:
             self.mean_error = merr
-            
+
         # get the final dataframe for the testing set
         self.final_df = get_final_df(self.model, self.data, self.pdata.SCALE, self.pdata.LOOKUP_STEP, self.output_column)
         self.loss = loss
@@ -223,10 +211,10 @@ class TradingResult:
         if 'true_adjclose' not in final_df:
             final_df['true_adjclose'] = self.data['test_df']['unscaled_future_adjclose']
         apply_trade(final_df,  self.pdata.LOOKUP_STEP, trade)
-        
+
 
         # we calculate the accuracy by counting the number of positive profits
-        self.accuracy_score = (len(final_df[final_df['sell_profit'] >= 0]) + len(final_df[final_df['buy_profit'] >= 0])) / len(final_df)
+        self.accuracy_score = (len(final_df[(final_df['sell_profit'] + final_df['buy_profit']) > 0]))  / len(final_df)
         # calculating total buy & sell profit
         self.total_buy_profit  = final_df["buy_profit"].sum()
         self.total_sell_profit = final_df["sell_profit"].sum()
@@ -272,18 +260,18 @@ class PreparedData:
         self.OUTPUT_COLUMN = output
         self.ticker = ticker
         # date now
-        self.date_now = time.strftime("%Y-%m-%d")        
-        self.ticker_data_filename = os.path.join("data", f"{self.ticker}_{self.date_now}.csv")
+        self.date_now = time.strftime("%Y-%m-%d")
+        self.ticker_data_filename = os.path.join("data", f"{self.ticker}_{self.date_now}")
         self.data_prefix = f"{self.ticker}-{self.OUTPUT_COLUMN}-{self.shuffle_str}-{self.scale_str}-{self.split_by_date_str}-seq-{self.N_STEPS}-step-{self.LOOKUP_STEP}"
-        
+
     def prepare(self,  df):
         # load the data
-        self.data = load_data(df, self.N_STEPS, scale=self.SCALE, split_by_date=self.SPLIT_BY_DATE, 
-                shuffle=self.SHUFFLE, lookup_step=self.LOOKUP_STEP, test_size=self.TEST_SIZE, 
+        self.data = load_data(df, self.N_STEPS, scale=self.SCALE, split_by_date=self.SPLIT_BY_DATE,
+                shuffle=self.SHUFFLE, lookup_step=self.LOOKUP_STEP, test_size=self.TEST_SIZE,
                               feature_columns=self.FEATURE_COLUMNS, output_column=self.OUTPUT_COLUMN)
 
         # save the dataframe
-        self.data["df"].to_csv(self.ticker_data_filename)
+        self.data["df"].to_csv(f"{self.ticker_data_filename}.csv")
 
 
 def fetch_data(ticker):
@@ -380,7 +368,7 @@ class RNNModel:
         self.earlystopping = EarlyStopping(monitor='loss', patience=5)
 
     def train(self, data):
-        # train the model and save the weights whenever we see 
+        # train the model and save the weights whenever we see
         # a new optimal model using ModelCheckpoint
         history = self.model.fit(data["X_train"], data["y_train"],
                                  batch_size=self.BATCH_SIZE,
@@ -401,12 +389,12 @@ def runModel(ticker, modifier, trading, do_train=True):
     data = fetch_data(ticker)
 
     data = modifier.change_data(data)
-    
+
     pdata = PreparedData(ticker)
     modifier.change_prep(pdata)
-        
+
     pdata.prepare(data)
-    
+
     mod = RNNModel()
 
     modifier.change_model(mod)
@@ -423,7 +411,3 @@ def runModel(ticker, modifier, trading, do_train=True):
     #df.set_index(['Ticker', 'Name'])
     return {'Ticker': ticker, 'Name': modifier.name, 'Buy': res.total_buy_profit,
                'Sell': res.total_sell_profit, 'Total': res.total_profit}
-              
-
-
-
