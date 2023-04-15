@@ -1,3 +1,5 @@
+import time
+import os.path
 import numpy as np
 import pandas as pd
 
@@ -10,13 +12,15 @@ class NormalTrading:
 
 class LowTrading:
   name = 'Low'
-  buy_profit  = lambda row :  row.true_adjclose - row.pred_low if row.true_low <= row.pred_low else 0
-  sell_profit = lambda row: row.adjclose - row.true_adjclose if row.pred_low > row.true_low else row.adjclose - row.pred_low
+  buy_profit  = lambda row :  row.true_adjclose - row.pred_low \
+    if (row.true_low <= row.pred_low)  else 0
+  sell_profit = lambda row: 0 if row.adjclose < row.pred_low else row.adjclose - row.true_adjclose \
+    if row.true_low > row.pred_low else row.adjclose - row.pred_low
 
 class HighTrading:
   name = 'High'
   sell_profit  = lambda row:  row.pred_high-row.true_adjclose if row.true_high >= row.pred_high else 0
-  buy_profit = lambda row: row.true_adjclose-row.adjclose  if row.pred_high < row.true_high else row.pred_high-row.adjclose
+  buy_profit = lambda row: 0 if row.pred_high < row.adjclose else row.true_adjclose-row.adjclose  if row.pred_high > row.true_high else row.pred_high-row.adjclose
 
 
 class NoModifier:
@@ -226,13 +230,28 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
   modifier.change_prep(genpdata)
   pdatas = []
   tickerset = set()
+  date_now = time.strftime("%Y-%m-%d")
+
   for ticker in tickers:
     if ticker in tickerset:
       raise ValueError(f"Duplicate ticker {ticker}")
     tickerset.add(ticker)
 
+
   for ticker in tickers:
-    data = fetch_data(ticker)
+    ticker_data_filename = os.path.join("data", f"{ticker}_{date_now}.csv")
+    if os.path.isfile(ticker_data_filename):
+      if IS_VERBOSE:
+        print(f"loading file {ticker_data_filename}")
+      data = pd.read_csv(ticker_data_filename,index_col=0)
+      data.index =  pd.to_datetime(data.index)
+    else:
+      data = fetch_data(ticker)
+      data = data.round(3)
+      # save the dataframe
+      data.to_csv(f"{ticker_data_filename}")
+
+    # data = fetch_data(ticker)
     data = modifier.change_data(data)
     pdata = PreparedData(ticker, output)
     pdatas.append(pdata)
@@ -279,12 +298,12 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
         {'Ticker': pdata.ticker,
          'Name': modifier.name,
          'Error': res.mean_error,
-         'Accuracy': res.accuracy_score,
+         'Accu': res.accuracy_score,
          'Buy': round(res.total_buy_profit,2),
          'Sell': round(res.total_sell_profit,2),
          'Total': round(res.total_profit,2),
          'Last': round(pdata.lastprice,2),
-         'Predicted': round(modifier.predicted_price(pdata, res),2),
+         'Pred': round(modifier.predicted_price(pdata, res),2),
          'Gain': round(modifier.predicted_gain(pdata, res),2)
          })
 
@@ -293,13 +312,35 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
 # Add adjhigh, adjlow
 # Train for them
 
-def runModelCombinedVola(tickers, name, modifier, do_train=True, loss="huber_loss"):
+def runModelCombinedVola(tickers, name, modifier, do_train=True, loss="huber_loss", trading= {'adjclose' : NormalTrading, 'high' : HighTrading, 'low' : LowTrading }):
   dfs = []
-  trading = {'adjclose' : NormalTrading, 'high' : HighTrading, 'low' : LowTrading }
-  for col, cls in trading.items():
-    df, results = runModelCombined(tickers, name, modifier, do_train, loss, col, cls)
-    df["Col"] = col
+  for target, cls in trading.items():
+    df, results = runModelCombined(tickers, name, modifier, do_train, loss, target, cls)
+    df = df.drop(['Name', 'Total'], axis=1)
+    df=df.round(2)
+
+    if target != 'adjclose':
+      df = df.drop(['Last', 'Error'], axis=1)
+      cols =  ['Error', 'Accu', 'Buy', 'Sell', 'Total', 'Pred', 'Gain']
+      renamed = [f"{c}_{target[0]}" for c in cols]
+      colmap = dict(zip(cols, renamed))
+      df.rename(columns=colmap, inplace=True)
+      df.set_index('Ticker')
+    dfs.append(df)
+
+  finaldf = pd.concat(dfs, axis=1)
+  finaldf = finaldf.loc[:,~finaldf.columns.duplicated()].copy()
+  # return finaldf.set_index(['Ticker']);
+  return finaldf
+
+def runModelCombinedVolaR(tickers, name, modifier, do_train=True, loss="huber_loss", trading= {'adjclose' : NormalTrading, 'high' : HighTrading, 'low' : LowTrading }):
+  dfs = []
+  for target, cls in trading.items():
+    df, results = runModelCombined(tickers, name, modifier, do_train, loss, target, cls)
+    df=df.round(2)
+    df['Target'] = target
     dfs.append(df)
 
   finaldf = pd.concat(dfs)
-  return finaldf.set_index(['Ticker', 'Col']);
+  return finaldf.set_index(['Ticker', 'Target']);
+  return finaldf

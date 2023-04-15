@@ -270,9 +270,6 @@ class PreparedData:
                 shuffle=self.SHUFFLE, lookup_step=self.LOOKUP_STEP, test_size=self.TEST_SIZE,
                               feature_columns=self.FEATURE_COLUMNS, output_column=self.OUTPUT_COLUMN)
 
-        # save the dataframe
-        self.data["df"].to_csv(f"{self.ticker_data_filename}.csv")
-
 
 def fetch_data(ticker):
 # see if ticker is already a loaded stock from yahoo finance
