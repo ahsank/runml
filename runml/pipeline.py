@@ -236,7 +236,7 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
     mod.load()
 
 
-  df = getStatFrame()
+  rows = []
   results = {}
 
   for pdata in pdatas:
@@ -246,7 +246,7 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
     if IS_VERBOSE:
         res.print()
     modifier.print(res)
-    df = df.append(
+    rows.append(
         {'Ticker': pdata.ticker,
          'Name': modifier.name,
          'Error': res.mean_error,
@@ -257,7 +257,18 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
          'Last': round(pdata.lastprice,2),
          'Predicted': round(modifier.predicted_price(pdata, res),2),
          'Gain': round(modifier.predicted_gain(pdata, res),2)
-         }, ignore_index=True)
+         })
 
-  return df, results
+  return pd.DataFrame(rows), results
 
+
+def testOnce():
+    from runml import findata
+    tickers = ['AAL', 'ADI', 'ALB', 'ANF', 'APO', 'AQN', 'ARCH', 'ARE']
+    findata.EPOCHS=20
+
+    mod = RateReturnOnly(FeatureSeq([AddDayMonth(), AddVWap(), AddMA(200)]))
+    lossfn = "huber_loss"
+    df = runModelCombined(tickers, 'test-2a', mod, True, loss=lossfn)[0]
+    df = runModelCombined(tickers, 'test-2a', mod, False, loss=lossfn)[0]
+    return df
