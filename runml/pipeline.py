@@ -216,7 +216,7 @@ class RateReturnOnly(NoModifier):
       self.next.change_model(mod)
 
   def predicted_price(self, pdata, res):
-    return res.future_price
+    return float(res.future_price)
 
   def predicted_gain(self, pdata, res):
     return self.predicted_price(pdata, res)/pdata.lastprice-1
@@ -297,8 +297,8 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", 
     rows.append(
         {'Ticker': pdata.ticker,
          'Name': modifier.name,
-         'Error': res.mean_error,
-         'Accu': res.accuracy_score,
+         'Error': round(res.mean_error,2),
+         'Accu': round(res.accuracy_score,2),
          'Buy': round(res.total_buy_profit,2),
          'Sell': round(res.total_sell_profit,2),
          'Total': round(res.total_profit,2),
@@ -320,7 +320,7 @@ def runModelCombinedVola(tickers, name, modifier, do_train=True, loss="huber_los
     df=df.round(2)
 
     if target != 'adjclose':
-      df = df.drop(['Last', 'Error'], axis=1)
+      df = df.drop(['Last'], axis=1)
       cols =  ['Error', 'Accu', 'Buy', 'Sell', 'Total', 'Pred', 'Gain']
       renamed = [f"{c}_{target[0]}" for c in cols]
       colmap = dict(zip(cols, renamed))

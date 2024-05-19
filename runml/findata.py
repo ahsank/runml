@@ -196,7 +196,8 @@ class TradingResult:
         loss, merr = self.model.evaluate(self.data["X_test"], self.data["y_test"], verbose=0)
         # calculate the mean absolute error (inverse scaling)
         if self.pdata.SCALE:
-            self.mean_error = self.data["column_scaler"][self.output_column].inverse_transform([[merr]])[0][0]
+            scaler = self.data["column_scaler"][self.output_column]
+            self.mean_error = scaler.inverse_transform([[merr]])[0][0] - scaler.data_min_[0]
         else:
             self.mean_error = merr
 
