@@ -6,7 +6,7 @@ from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
 from yahoo_fin import stock_info as si
 from collections import deque
-
+from tensorflow.keras.losses import Huber
 import os
 import numpy as np
 import pandas as pd
@@ -169,6 +169,9 @@ def apply_trade(final_df, lookup_step, trade):
                                     )
     return final_df
 
+def getName(obj):
+    return obj if isinstance(obj, str) else obj.name
+
 class TradingResult:
     def __init__(self, model, prepdata, lossn):
         self.model = model
@@ -229,7 +232,7 @@ class TradingResult:
         # printing metrics
         print(f"Ticker {self.pdata.ticker}")
         print(f"Future price after {self.pdata.LOOKUP_STEP} days is {self.future_price:.2f}$")
-        print(f"{self.LOSSN}_loss:", self.loss)
+        print(f"{getName(self.LOSSN)}_loss:", self.loss)
         print("Mean Error:", self.mean_error)
         print("Accuracy score:", self.accuracy_score)
         print("Total buy profit:", self.total_buy_profit)
@@ -295,7 +298,7 @@ def create_model(sequence_length, n_features, units=256, cell=LSTM, n_layers=2, 
             if bidirectional:
                 model.add(Bidirectional(cell(units, return_sequences=True), batch_input_shape=(None, sequence_length, n_features)))
             else:
-                model.add(cell(units, return_sequences=True, batch_input_shape=(None, sequence_length, n_features)))
+                model.add(cell(units, return_sequences=True))
         elif i == n_layers - 1:
             # last layer
             if bidirectional:
@@ -322,7 +325,7 @@ from tensorflow.keras.layers import LSTM
 EPOCHS = 20
 
 class RNNModel:
-    def __init__(self, loss="huber_loss"):
+    def __init__(self, loss=Huber()):
         self.date_now = time.strftime("%Y-%m-%d")
         ### model parameters
         self.N_LAYERS = 2
@@ -345,8 +348,8 @@ class RNNModel:
 
     def create(self, prepdata):
         # model name to save, making it as unique as possible based on parameters
-        self.model_name = f"{prepdata.data_prefix}-model-{self.LOSS}-{self.OPTIMIZER}-{self.CELL.__name__}-layers-{self.N_LAYERS}-units-{self.UNITS}"
-        self.model_path = os.path.join("results", self.model_name + ".h5")
+        self.model_name = f"{prepdata.data_prefix}-model-{getName(self.LOSS)}-{self.OPTIMIZER}-{self.CELL.__name__}-layers-{self.N_LAYERS}-units-{self.UNITS}"
+        self.model_path = os.path.join("results", self.model_name + ".weights.h5")
         if self.BIDIRECTIONAL:
             self.model_name += "-b"
 
@@ -381,6 +384,14 @@ class RNNModel:
         print(f"loading model from {self.model_path}")
         self.model.load_weights(self.model_path)
 
+
+def getPreparedData(ticker, modifier, target_col='adjclose'):
+    data = fetch_data(ticker)
+    data = modifier.change_data(data)
+    pdata = PreparedData(ticker, target_col)
+    modifier.change_prep(pdata)
+    pdata.prepare(data)
+    return pdata
 
 
 def runModel(ticker, modifier, trading, do_train=True):
