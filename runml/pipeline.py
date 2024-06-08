@@ -2,7 +2,6 @@ import time
 import os.path
 import numpy as np
 import pandas as pd
-from tensorflow.keras.losses import Huber
 
 from .findata import PreparedData, fetch_data, RNNModel, TradingResult
 
@@ -225,7 +224,7 @@ class RateReturnOnly(NoModifier):
 
 IS_VERBOSE = False
 
-def runModelCombined(tickers, name, modifier, do_train=True, loss=Huber(), output='adjclose', trading=NormalTrading):
+def runModelCombined(tickers, name, modifier, do_train=True, loss="huber_loss", output='adjclose', trading=NormalTrading):
   genpdata = PreparedData(name, output)
   genpdata.data = {}
   modifier.change_prep(genpdata)
