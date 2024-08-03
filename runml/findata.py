@@ -296,7 +296,7 @@ def create_model(sequence_length, n_features, units=256, cell=LSTM, n_layers=2, 
         if i == 0:
             # first layer
             if bidirectional:
-                model.add(Bidirectional(cell(units, return_sequences=True), batch_input_shape=(None, sequence_length, n_features)))
+                model.add(Bidirectional(cell(units, return_sequences=True)))
             else:
                 model.add(cell(units, return_sequences=True))
         elif i == n_layers - 1:
