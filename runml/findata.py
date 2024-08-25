@@ -349,9 +349,9 @@ class RNNModel:
     def create(self, prepdata):
         # model name to save, making it as unique as possible based on parameters
         self.model_name = f"{prepdata.data_prefix}-model-{getName(self.LOSS)}-{self.OPTIMIZER}-{self.CELL.__name__}-layers-{self.N_LAYERS}-units-{self.UNITS}"
-        self.model_path = os.path.join("results", self.model_name + ".weights.h5")
         if self.BIDIRECTIONAL:
             self.model_name += "-b"
+        self.model_path = os.path.join("results", self.model_name + ".keras")
 
         # create these folders if they does not exist
         if not os.path.isdir("results"):
@@ -364,7 +364,7 @@ class RNNModel:
         self.model = create_model(prepdata.N_STEPS, len(prepdata.FEATURE_COLUMNS), loss=self.LOSS, units=self.UNITS, cell=self.CELL, n_layers=self.N_LAYERS,
                     dropout=self.DROPOUT, optimizer=self.OPTIMIZER, bidirectional=self.BIDIRECTIONAL)
         # some tensorflow callbacks
-        self.checkpointer = ModelCheckpoint(self.model_path, save_weights_only=True, save_best_only=True, verbose=1)
+        self.checkpointer = ModelCheckpoint(self.model_path, save_best_only=True, verbose=1)
         self.tensorboard = TensorBoard(log_dir=os.path.join("logs", self.model_name))
         self.earlystopping = EarlyStopping(monitor='loss', patience=5)
 
@@ -382,7 +382,7 @@ class RNNModel:
     def load(self):
         # load optimal model weights from results folder
         print(f"loading model from {self.model_path}")
-        self.model.load_weights(self.model_path)
+        self.model = tf.keras.models.load_model(self.model_path)
 
 
 def getPreparedData(ticker, modifier, target_col='adjclose'):
