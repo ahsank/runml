@@ -6,7 +6,6 @@ from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
 from yahoo_fin import stock_info as si
 from collections import deque
-from tensorflow.keras.losses import Huber
 import os
 import numpy as np
 import pandas as pd
@@ -27,6 +26,17 @@ def shuffle_in_unison(a, b):
     np.random.shuffle(a)
     np.random.set_state(state)
     np.random.shuffle(b)
+
+
+def get_scaler(name):
+    if name == 'minmax':
+        return preprocessing.MinMaxScaler()
+    elif name == 'standard':
+        return preprocessing.StandardScaler()
+    elif name == 'standard-noscale':
+        return preprocessing.StandardScaler(with_std=False)
+    else:
+        raise Exception("Invalid scaler " + name)
 
 # Following two functions code mainly from https://www.thepythoncode.com/article/stock-price-prediction-in-python-using-tensorflow-2-and-keras
 def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
@@ -63,7 +73,7 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
         column_scaler = {}
         # scale the data (prices) from 0 to 1
         for column in feature_columns:
-            scaler = preprocessing.MinMaxScaler()
+            scaler = get_scaler(scale)
             df[column] = scaler.fit_transform(np.expand_dims(df[column].values, axis=1))
             column_scaler[column] = scaler
         # add the MinMaxScaler instances to the result returned
@@ -169,9 +179,6 @@ def apply_trade(final_df, lookup_step, trade):
                                     )
     return final_df
 
-def getName(obj):
-    return obj if isinstance(obj, str) else obj.name
-
 class TradingResult:
     def __init__(self, model, prepdata, lossn):
         self.model = model
@@ -200,7 +207,12 @@ class TradingResult:
         # calculate the mean absolute error (inverse scaling)
         if self.pdata.SCALE:
             scaler = self.data["column_scaler"][self.output_column]
-            self.mean_error = scaler.inverse_transform([[merr]])[0][0] - scaler.data_min_[0]
+            if self.pdata.SCALE == "minmax":
+                self.mean_error = scaler.inverse_transform([[merr]])[0][0] - scaler.data_min_[0]
+            elif self.pdata.SCALE in ["standard", "standard-noscale"]:
+                self.mean_error = scaler.inverse_transform([[merr]])[0][0] - scaler.mean_[0]
+            else:
+                raise Exception(f"Invalid scaler {self.pdata.SCALE}")
         else:
             self.mean_error = merr
 
@@ -232,7 +244,7 @@ class TradingResult:
         # printing metrics
         print(f"Ticker {self.pdata.ticker}")
         print(f"Future price after {self.pdata.LOOKUP_STEP} days is {self.future_price:.2f}$")
-        print(f"{getName(self.LOSSN)}_loss:", self.loss)
+        print(f"{self.LOSSN}_loss:", self.loss)
         print("Mean Error:", self.mean_error)
         print("Accuracy score:", self.accuracy_score)
         print("Total buy profit:", self.total_buy_profit)
@@ -240,7 +252,8 @@ class TradingResult:
         print("Total profit:", self.total_profit)
         print("Profit per trade:", self.profit_per_trade)
 
-G_LOOKUP_STEP = 15
+G_LOOKUP_STEP = 20
+G_SCALER = "minmax"
 
 class PreparedData:
     def __init__(self, ticker, output):
@@ -249,8 +262,8 @@ class PreparedData:
 	# Lookup step, 1 is the next day
         self.LOOKUP_STEP = G_LOOKUP_STEP
         # whether to scale feature columns & output price as well
-        self.SCALE = True
-        self.scale_str = f"sc-{int(self.SCALE)}"
+        self.SCALE = G_SCALER
+        self.scale_str = f"sc-{self.SCALE}"
         # whether to shuffle the dataset
         self.SHUFFLE = True
         self.shuffle_str = f"sh-{int(self.SHUFFLE)}"
@@ -325,7 +338,7 @@ from tensorflow.keras.layers import LSTM
 EPOCHS = 20
 
 class RNNModel:
-    def __init__(self, loss=Huber()):
+    def __init__(self, loss):
         self.date_now = time.strftime("%Y-%m-%d")
         ### model parameters
         self.N_LAYERS = 2
@@ -348,7 +361,7 @@ class RNNModel:
 
     def create(self, prepdata):
         # model name to save, making it as unique as possible based on parameters
-        self.model_name = f"{prepdata.data_prefix}-model-{getName(self.LOSS)}-{self.OPTIMIZER}-{self.CELL.__name__}-layers-{self.N_LAYERS}-units-{self.UNITS}"
+        self.model_name = f"{prepdata.data_prefix}-model-{self.LOSS}-{self.OPTIMIZER}-{self.CELL.__name__}-layers-{self.N_LAYERS}-units-{self.UNITS}"
         if self.BIDIRECTIONAL:
             self.model_name += "-b"
         self.model_path = os.path.join("results", self.model_name + ".keras")

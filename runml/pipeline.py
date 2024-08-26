@@ -224,8 +224,9 @@ class RateReturnOnly(NoModifier):
 
 
 IS_VERBOSE = False
+LOSSFN = "Huber"
 
-def runModelCombined(tickers, name, modifier, do_train=True, loss=Huber(), output='adjclose', trading=NormalTrading):
+def runModelCombined(tickers, name, modifier, do_train=True, loss=LOSSFN, output='adjclose', trading=NormalTrading):
   genpdata = PreparedData(name, output)
   genpdata.data = {}
   modifier.change_prep(genpdata)
@@ -313,7 +314,7 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss=Huber(), outpu
 # Add adjhigh, adjlow
 # Train for them
 
-def runModelCombinedVola(tickers, name, modifier, do_train=True, loss="huber_loss", trading= {'adjclose' : NormalTrading, 'high' : HighTrading, 'low' : LowTrading }):
+def runModelCombinedVola(tickers, name, modifier, do_train=True, loss=LOSSFN, trading= {'adjclose' : NormalTrading, 'high' : HighTrading, 'low' : LowTrading }):
   dfs = []
   for target, cls in trading.items():
     df, results = runModelCombined(tickers, name, modifier, do_train, loss, target, cls)
@@ -334,7 +335,7 @@ def runModelCombinedVola(tickers, name, modifier, do_train=True, loss="huber_los
   # return finaldf.set_index(['Ticker']);
   return finaldf
 
-def runModelCombinedVolaR(tickers, name, modifier, do_train=True, loss="huber_loss", trading= {'adjclose' : NormalTrading, 'high' : HighTrading, 'low' : LowTrading }):
+def runModelCombinedVolaR(tickers, name, modifier, do_train=True, loss=LOSSFN, trading= {'adjclose' : NormalTrading, 'high' : HighTrading, 'low' : LowTrading }):
   dfs = []
   for target, cls in trading.items():
     df, results = runModelCombined(tickers, name, modifier, do_train, loss, target, cls)
