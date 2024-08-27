@@ -360,15 +360,15 @@ class NormalTradingRR:
 
 class LowTradingRR:
   name = 'Low'
-  buy_profit  = lambda row :  row.true_adjclose_period_change - row.pred_low_period_change \
-    if (row.true_low_period_change <= row.pred_low_period_change and row.pred_low_period_change < 0)  else 0
-  sell_profit = lambda row: 0 if  row.pred_low_period_change > 0 else row.true_adjclose_period_change \
-    if row.true_low_period_change >= row.pred_low_period_change else - row.pred_low_period_change
+  buy_profit  = lambda row :  row.true_adjclose_period_change - min(row.pred_low_period_change,0) \
+    if row.true_low_period_change <= row.pred_low_period_change  else 0
+  sell_profit = lambda row: 0 if  row.pred_low_period_change >= 0 else -row.true_adjclose_period_change \
+    if row.true_low_period_change > row.pred_low_period_change else - row.pred_low_period_change
 
 class HighTradingRR:
   name = 'High'
-  sell_profit  = lambda row:  row.pred_high_period_change-row.true_adjclose_period_change if row.true_high_period_change >= row.pred_high_period_change  else 0
-  buy_profit = lambda row: 0 if row.pred_high_period_change < 0 else row.true_adjclose_period_change   if row.pred_high_period_change > row.true_high_period_change else row.pred_high_period_change
+  sell_profit  = lambda row:  max(row.pred_high_period_change, 0)-row.true_adjclose_period_change if max(row.true_high_period_change, row.true_adjclose_period_change) >= row.pred_high_period_change  else 0
+  buy_profit = lambda row: 0 if row.pred_high_period_change <= 0 else row.true_adjclose_period_change   if row.pred_high_period_change > row.true_high_period_change else row.pred_high_period_change
 
 
 def runModelCombinedRR(tickers, name, modifier, do_train=True, loss=LOSSFN, trading= {'adjclose_period_change' : NormalTradingRR, 'high_period_change' : HighTradingRR, 'low_period_change' : LowTradingRR }):

@@ -186,7 +186,7 @@ def get_final_df(model, data, scale, lookup_step, output_column):
         f"true_{output_column}_{lookup_step}": f"true_{output_column}"})
 
 
-def apply_trade(final_df, lookup_step, trade):
+def apply_trade(final_df, trade):
     # TODO: Use multi index
     final_df["buy_profit"] = list(final_df.apply(trade.buy_profit, axis=1)
                                     # since we don't have profit for last sequence, add 0's
@@ -247,7 +247,7 @@ class TradingResult:
         if 'true_adjclose_period_change' not in final_df:
             final_df['true_adjclose_period_change'] = self.data['test_df']['unscaled_future_adjclose_period_change']
 
-        apply_trade(final_df,  self.pdata.LOOKUP_STEP, trade)
+        apply_trade(final_df, trade)
 
 
         # we calculate the accuracy by counting the number of positive profits
