@@ -69,9 +69,11 @@ class AddVWap(NoModifier):
 
 
     def change_data(self, data):
-
-        df = data.apply(lambda row: row.adjclose * row.volume, axis = 1)
-        return df.to_frame('vwap').join(data)
+      df = data
+      df['CumulativeTPV'] = (df['adjclose'] * df['volume']).cumsum()
+      df['CumulativeVolume'] = df['volume'].cumsum()
+      data['vwap'] = df['CumulativeTPV'] / df['CumulativeVolume'] / df['adjclose']
+      return data
 
 class AddDayMonth(NoModifier):
     def __init__(self):
@@ -128,8 +130,7 @@ class AddMA(NoModifier):
   def change_data(self, data):
     df = (data[self.col]
           .rolling(window=self.period, min_periods=1)
-          .mean()
-          .to_frame(self.colname))
+          .mean()/data[self.col]).to_frame(self.colname)
 #          .dropna()
     return df.join(data)
 
@@ -182,7 +183,6 @@ class FeatureSeq(NoModifier):
 
 
 class RateReturnOnly(NoModifier):
-
   def __init__(self, next=None):
     self.name = 'RROnly'
     self.next = next
@@ -217,10 +217,27 @@ class RateReturnOnly(NoModifier):
       self.next.change_model(mod)
 
   def predicted_price(self, pdata, res):
-    return float(res.future_price)
+    if res.output_column.endswith("_change"):
+      return float(pdata.lastprice) + float(res.future_value)
+    else:
+      return float(res.future_value)
 
   def predicted_gain(self, pdata, res):
-    return self.predicted_price(pdata, res)/pdata.lastprice-1
+    if res.output_column.endswith("_change"):
+      return float(res.future_value)/float(pdata.lastprice)
+    else:
+      return self.predicted_price(pdata, res)/pdata.lastprice-1
+
+class ValueChange(NoModifier):
+  def __init__(self, next=None):
+    self.name = 'VChange'
+
+
+  def change_prep(self, pdata):
+    pdata.ticker_data_filename += f"-w{self.name}"
+    pdata.data_prefix += f"-w{self.name}"
+    cols = ["adjclose", "volume", "open", "high", "low"]
+    pdata.FEATURE_COLUMNS = [col + '_change' if col in cols else col for col in  pdata.FEATURE_COLUMNS]
 
 
 IS_VERBOSE = False
@@ -259,9 +276,6 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss=LOSSFN, output
     pdatas.append(pdata)
     modifier.change_prep(pdata)
     pdata.prepare(data)
-    mod = RNNModel(loss=loss)
-    modifier.change_model(mod)
-    mod.create(genpdata)
 
     if  do_train:
       if 'X_train' in genpdata.data:
@@ -278,10 +292,14 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss=LOSSFN, output
         genpdata.data['X_test'] = pdata.data['X_test']
         genpdata.data['y_test'] = pdata.data['y_test']
 
+  model = RNNModel(loss=loss)
+  modifier.change_model(model)
+  model.create(genpdata)
+
   if do_train:
-    mod.train(genpdata.data)
+    model.train(genpdata.data)
   else:
-    mod.load()
+    model.load()
 
 
   df = getStatFrame()
@@ -289,7 +307,7 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss=LOSSFN, output
   results = {}
 
   for pdata in pdatas:
-    res = TradingResult(mod.model, pdata, mod.LOSS)
+    res = TradingResult(model.model, pdata, model.LOSS)
     results[pdata.ticker] = res
     res.eval()
     res.do_trade(trading)
@@ -322,6 +340,45 @@ def runModelCombinedVola(tickers, name, modifier, do_train=True, loss=LOSSFN, tr
     df=df.round(2)
 
     if target != 'adjclose':
+      df = df.drop(['Last'], axis=1)
+      cols =  ['Error', 'Accu', 'Buy', 'Sell', 'Total', 'Pred', 'Gain']
+      renamed = [f"{c}_{target[0]}" for c in cols]
+      colmap = dict(zip(cols, renamed))
+      df.rename(columns=colmap, inplace=True)
+      df.set_index('Ticker')
+    dfs.append(df)
+
+  finaldf = pd.concat(dfs, axis=1)
+  finaldf = finaldf.loc[:,~finaldf.columns.duplicated()].copy()
+  # return finaldf.set_index(['Ticker']);
+  return finaldf
+
+class NormalTradingRR:
+  name = 'Normal'
+  buy_profit  = lambda row : row.true_adjclose_period_change  if row.pred_adjclose_period_change > 0 else 0
+  sell_profit = lambda row: - row.true_adjclose_period_change if row.pred_adjclose_period_change < 0 else 0
+
+class LowTradingRR:
+  name = 'Low'
+  buy_profit  = lambda row :  row.true_adjclose_period_change - row.pred_low_period_change \
+    if (row.true_low_period_change <= row.pred_low_period_change and row.pred_low_period_change < 0)  else 0
+  sell_profit = lambda row: 0 if  row.pred_low_period_change > 0 else row.true_adjclose_period_change \
+    if row.true_low_period_change >= row.pred_low_period_change else - row.pred_low_period_change
+
+class HighTradingRR:
+  name = 'High'
+  sell_profit  = lambda row:  row.pred_high_period_change-row.true_adjclose_period_change if row.true_high_period_change >= row.pred_high_period_change  else 0
+  buy_profit = lambda row: 0 if row.pred_high_period_change < 0 else row.true_adjclose_period_change   if row.pred_high_period_change > row.true_high_period_change else row.pred_high_period_change
+
+
+def runModelCombinedRR(tickers, name, modifier, do_train=True, loss=LOSSFN, trading= {'adjclose_period_change' : NormalTradingRR, 'high_period_change' : HighTradingRR, 'low_period_change' : LowTradingRR }):
+  dfs = []
+  for target, cls in trading.items():
+    df, results = runModelCombined(tickers, name, modifier, do_train, loss, target, cls)
+    df = df.drop(['Name', 'Total'], axis=1)
+    df=df.round(2)
+
+    if target != 'adjclose_period_change':
       df = df.drop(['Last'], axis=1)
       cols =  ['Error', 'Accu', 'Buy', 'Sell', 'Total', 'Pred', 'Gain']
       renamed = [f"{c}_{target[0]}" for c in cols]

@@ -58,9 +58,21 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
     # this will contain all the elements we want to return from this function
     result = {}
     # we will also return the original dataframe itself
+    df['high_change'] = df['high'].diff()
+    df['open_change'] = df['open'].diff()
+    df['low_change'] = df['low'].diff()
+    df['adjclose_change'] = df['adjclose'].diff()
+    df['volume_change'] = df['volume'].diff()
+    additional_col = []
+    if output_column.endswith('_period_change'):
+        col = output_column.removesuffix('_period_change')
+        df[output_column]  = df[col].shift(-lookup_step) - df[col]
+        additional_col = [output_column]
     origdf = df.copy()
     # Also save unscaled future adjclose as it's needed for example high low based trading
     origdf['unscaled_future_adjclose'] = origdf['adjclose'].shift(-lookup_step)
+    origdf['unscaled_future_adjclose_period_change'] = origdf['unscaled_future_adjclose'] - origdf['adjclose']
+
     result['df'] = origdf.copy()
 
     # make sure that the passed feature_columns exist in the dataframe
@@ -72,16 +84,22 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
     if scale:
         column_scaler = {}
         # scale the data (prices) from 0 to 1
-        for column in feature_columns:
+        for column in feature_columns + additional_col:
             scaler = get_scaler(scale)
             df[column] = scaler.fit_transform(np.expand_dims(df[column].values, axis=1))
             column_scaler[column] = scaler
         # add the MinMaxScaler instances to the result returned
         result["column_scaler"] = column_scaler
     # add some  target column (label) by shifting by `lookup_step`
-    df['future_adjclose'] = df['adjclose'].shift(-lookup_step)
-    df['future_low'] = df['low'].rolling(lookup_step).min().shift(-lookup_step)
-    df['future_high'] = df['high'].rolling(lookup_step).max().shift(-lookup_step)
+    if output_column == 'adjclose':
+        df['future_adjclose'] = df['adjclose'].shift(-lookup_step)
+    elif output_column == 'low':
+        df['future_low'] = df['low'].rolling(lookup_step).min().shift(-lookup_step)
+    elif  output_column == 'high':
+        df['future_high'] = df['high'].rolling(lookup_step).max().shift(-lookup_step)
+    elif output_column.endswith('_period_change'):
+        df[f"future_{output_column}"] = df[output_column]
+
     # training output column
     future_column = f"future_{output_column}"
 
@@ -208,9 +226,9 @@ class TradingResult:
         if self.pdata.SCALE:
             scaler = self.data["column_scaler"][self.output_column]
             if self.pdata.SCALE == "minmax":
-                self.mean_error = scaler.inverse_transform([[merr]])[0][0] - scaler.data_min_[0]
+                self.mean_error = (scaler.inverse_transform([[merr]])[0][0] - scaler.data_min_[0])/self.data["y_test"].mean()
             elif self.pdata.SCALE in ["standard", "standard-noscale"]:
-                self.mean_error = scaler.inverse_transform([[merr]])[0][0] - scaler.mean_[0]
+                self.mean_error = (scaler.inverse_transform([[merr]])[0][0] - scaler.mean_[0])/scaler.mean_[0]
             else:
                 raise Exception(f"Invalid scaler {self.pdata.SCALE}")
         else:
@@ -220,12 +238,15 @@ class TradingResult:
         self.final_df = get_final_df(self.model, self.data, self.pdata.SCALE, self.pdata.LOOKUP_STEP, self.output_column)
         self.loss = loss
         # predict the future price
-        self.future_price = self.predict()
+        self.future_value = self.predict()
 
     def do_trade(self, trade):
         final_df = self.final_df
         if 'true_adjclose' not in final_df:
             final_df['true_adjclose'] = self.data['test_df']['unscaled_future_adjclose']
+        if 'true_adjclose_period_change' not in final_df:
+            final_df['true_adjclose_period_change'] = self.data['test_df']['unscaled_future_adjclose_period_change']
+
         apply_trade(final_df,  self.pdata.LOOKUP_STEP, trade)
 
 
@@ -243,7 +264,7 @@ class TradingResult:
     def print(self):
         # printing metrics
         print(f"Ticker {self.pdata.ticker}")
-        print(f"Future price after {self.pdata.LOOKUP_STEP} days is {self.future_price:.2f}$")
+        print(f"Future value after {self.pdata.LOOKUP_STEP} days is {self.future_value:.2f}$")
         print(f"{self.LOSSN}_loss:", self.loss)
         print("Mean Error:", self.mean_error)
         print("Accuracy score:", self.accuracy_score)
@@ -382,6 +403,8 @@ class RNNModel:
         self.earlystopping = EarlyStopping(monitor='loss', patience=5)
 
     def train(self, data):
+        print(self.model_path)
+
         # train the model and save the weights whenever we see
         # a new optimal model using ModelCheckpoint
         history = self.model.fit(data["X_train"], data["y_train"],
