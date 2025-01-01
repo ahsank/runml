@@ -96,6 +96,9 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
         sequences.append(entry)
         if len(sequences) == n_steps:
             sequence_data.append([np.array(sequences), target])
+            if G_NON_OVERLAP:
+                sequences.clear()
+    
     # get the last sequence by appending the last `n_step` sequence with `lookup_step` sequence
     # for instance, if n_steps=50 and lookup_step=10, last_sequence should be of 60 (that is 50+10) length
     # this last_sequence will be used to predict future stock prices that are not available in the dataset
@@ -123,8 +126,16 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
             shuffle_in_unison(result["X_train"], result["y_train"])
             shuffle_in_unison(result["X_test"], result["y_test"])
     else:
+        # Save and remove last 2 elements from X and Y and add them to test to have better test evaluation on recent data
+        last_X = X[-2:]
+        last_y = y[-2:]
+        X = X[:-2]
+        y = y[:-2]
         # split the dataset randomly
         result["X_train"], result["X_test"], result["y_train"], result["y_test"] = train_test_split(X, y, test_size=test_size, shuffle=shuffle)
+        # Add last element to testing set
+        result["X_test"] = np.concatenate([result["X_test"], last_X])
+        result["y_test"] = np.concatenate([result["y_test"], last_y])
     # get the list of test set dates
     dates = result["X_test"][:, -1, -1]
     # retrieve test features from the original dataframe
@@ -252,8 +263,13 @@ class TradingResult:
         print("Total profit:", self.total_profit)
         print("Profit per trade:", self.profit_per_trade)
 
+
+EPOCHS = 200
+G_NON_OVERLAP = False
 G_LOOKUP_STEP = 20
 G_SCALER = "minmax"
+G_SPLIT_BY_DATE = False
+G_TEST_SIZE = 0.2
 
 class PreparedData:
     def __init__(self, ticker, output):
@@ -268,10 +284,10 @@ class PreparedData:
         self.SHUFFLE = True
         self.shuffle_str = f"sh-{int(self.SHUFFLE)}"
         # whether to split the training/testing set by date
-        self.SPLIT_BY_DATE = False
+        self.SPLIT_BY_DATE = G_SPLIT_BY_DATE
         self.split_by_date_str = f"sbd-{int(self.SPLIT_BY_DATE)}"
         # test ratio size, 0.2 is 20%
-        self.TEST_SIZE = 0.2
+        self.TEST_SIZE = G_TEST_SIZE
         # features to use
         self.FEATURE_COLUMNS = ["adjclose", "volume", "open", "high", "low"]
         self.OUTPUT_COLUMN = output
@@ -334,8 +350,6 @@ def create_model(sequence_length, n_features, units=256, cell=LSTM, n_layers=2, 
 import os
 import time
 from tensorflow.keras.layers import LSTM
-
-EPOCHS = 20
 
 class RNNModel:
     def __init__(self, loss):
