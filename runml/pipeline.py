@@ -191,8 +191,8 @@ class RateReturnOnly(NoModifier):
 
   def change_data(self, data):
     self.lastdata = data
-    # only use last 5 years data
-    newdata = data.copy(deep=True).tail(1000)
+    # only use last 10 years data
+    newdata = data.copy(deep=True).tail(2000)
     newdata.dropna(inplace=True)
 
     if self.next is None:

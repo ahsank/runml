@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import random
 import time
+from datetime import datetime, timedelta
 from tensorflow.keras.layers import LSTM
 import matplotlib.pyplot as plt
 
@@ -55,6 +56,8 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
         feature_columns (list): the list of features to use to feed into the model, default is everything grabbed from yahoo_fin
     """
     df = fetch_data(ticker)
+    # Get ticker name from df
+    ticker = df['ticker'].iloc[0]
     # this will contain all the elements we want to return from this function
     result = {}
     # we will also return the original dataframe itself
@@ -96,8 +99,9 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
         sequences.append(entry)
         if len(sequences) == n_steps:
             sequence_data.append([np.array(sequences), target])
-            if G_NON_OVERLAP:
-                sequences.clear()
+            # remove G_NON_OVERLAP elements from sequences
+            for _ in range(min(G_NON_OVERLAP, n_steps)):
+                sequences.popleft()
     
     # get the last sequence by appending the last `n_step` sequence with `lookup_step` sequence
     # for instance, if n_steps=50 and lookup_step=10, last_sequence should be of 60 (that is 50+10) length
@@ -132,10 +136,16 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
         X = X[:-2]
         y = y[:-2]
         # split the dataset randomly
-        result["X_train"], result["X_test"], result["y_train"], result["y_test"] = train_test_split(X, y, test_size=test_size, shuffle=shuffle)
+        print("Splitting dataset with size", ticker, X.shape[0], G_NON_OVERLAP, test_size, n_steps)
+        if (X.shape[0] > 10):
+            result["X_train"], result["X_test"], result["y_train"], result["y_test"] = train_test_split(X, y, test_size=test_size, shuffle=shuffle)
+        else:
+            # Just assign all data to training set
+            result["X_train"], result["X_test"], result["y_train"], result["y_test"] = train_test_split(X, y, train_size=1.0, shuffle=shuffle)
         # Add last element to testing set
         result["X_test"] = np.concatenate([result["X_test"], last_X])
         result["y_test"] = np.concatenate([result["y_test"], last_y])
+        print("Splitting dataset with size", result["X_test"].shape[0], result["X_train"].shape[0])
     # get the list of test set dates
     dates = result["X_test"][:, -1, -1]
     # retrieve test features from the original dataframe
@@ -235,6 +245,8 @@ class TradingResult:
 
     def do_trade(self, trade):
         final_df = self.final_df
+        # Only use date > today - 1 year
+        final_df = final_df[final_df.index > (datetime.now() - timedelta(days=365))].copy()
         if 'true_adjclose' not in final_df:
             final_df['true_adjclose'] = self.data['test_df']['unscaled_future_adjclose']
         apply_trade(final_df,  self.pdata.LOOKUP_STEP, trade)
@@ -265,16 +277,17 @@ class TradingResult:
 
 
 EPOCHS = 200
-G_NON_OVERLAP = False
+G_NON_OVERLAP = 0
 G_LOOKUP_STEP = 20
 G_SCALER = "minmax"
 G_SPLIT_BY_DATE = False
 G_TEST_SIZE = 0.2
+G_N_STEPS = 50
 
 class PreparedData:
     def __init__(self, ticker, output):
         # Window size or the sequence length
-        self.N_STEPS = 50
+        self.N_STEPS = G_N_STEPS
 	# Lookup step, 1 is the next day
         self.LOOKUP_STEP = G_LOOKUP_STEP
         # whether to scale feature columns & output price as well
