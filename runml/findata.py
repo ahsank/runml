@@ -15,6 +15,15 @@ from datetime import datetime, timedelta
 from tensorflow.keras.layers import LSTM
 import matplotlib.pyplot as plt
 
+EPOCHS = 200
+G_NON_OVERLAP = 0
+G_LOOKUP_STEP = 20
+G_SCALER = "minmax"
+G_SPLIT_BY_DATE = False
+G_TEST_SIZE = 0.2
+G_N_STEPS = 50
+G_MAX_TEST_YEAR = 3
+
 def prepare():
     # set seed, so we can get the same results after rerunning several times
     np.random.seed(314)
@@ -245,8 +254,8 @@ class TradingResult:
 
     def do_trade(self, trade):
         final_df = self.final_df
-        # Only use date > today - 1 year
-        final_df = final_df[final_df.index > (datetime.now() - timedelta(days=365))].copy()
+        # Only use date > today - G_MAX_TEST_YEAR year
+        final_df = final_df[final_df.index > (datetime.now() - timedelta(days=365*G_MAX_TEST_YEAR))].copy()
         if 'true_adjclose' not in final_df:
             final_df['true_adjclose'] = self.data['test_df']['unscaled_future_adjclose']
         apply_trade(final_df,  self.pdata.LOOKUP_STEP, trade)
@@ -275,14 +284,6 @@ class TradingResult:
         print("Total profit:", self.total_profit)
         print("Profit per trade:", self.profit_per_trade)
 
-
-EPOCHS = 200
-G_NON_OVERLAP = 0
-G_LOOKUP_STEP = 20
-G_SCALER = "minmax"
-G_SPLIT_BY_DATE = False
-G_TEST_SIZE = 0.2
-G_N_STEPS = 50
 
 class PreparedData:
     def __init__(self, ticker, output):
