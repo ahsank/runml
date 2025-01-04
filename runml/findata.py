@@ -145,7 +145,7 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
         X = X[:-2]
         y = y[:-2]
         # split the dataset randomly
-        print("Splitting dataset with size", ticker, X.shape[0], G_NON_OVERLAP, test_size, n_steps)
+        # print("Splitting dataset with size", ticker, X.shape[0], G_NON_OVERLAP, test_size, n_steps)
         if (X.shape[0] > 10):
             result["X_train"], result["X_test"], result["y_train"], result["y_test"] = train_test_split(X, y, test_size=test_size, shuffle=shuffle)
         else:
@@ -154,7 +154,7 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
         # Add last element to testing set
         result["X_test"] = np.concatenate([result["X_test"], last_X])
         result["y_test"] = np.concatenate([result["y_test"], last_y])
-        print("Splitting dataset with size", result["X_test"].shape[0], result["X_train"].shape[0])
+        # print("Splitting dataset with size", result["X_test"].shape[0], result["X_train"].shape[0])
     # get the list of test set dates
     dates = result["X_test"][:, -1, -1]
     # retrieve test features from the original dataframe
