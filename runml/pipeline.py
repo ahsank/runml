@@ -181,6 +181,8 @@ class FeatureSeq(NoModifier):
       cls.print(res)
 
 
+G_NUM_YEARS = 6
+
 class RateReturnOnly(NoModifier):
 
   def __init__(self, next=None):
@@ -192,7 +194,7 @@ class RateReturnOnly(NoModifier):
   def change_data(self, data):
     self.lastdata = data
     # only use last 10 years data
-    newdata = data.copy(deep=True).tail(2000)
+    newdata = data.copy(deep=True).tail(G_NUM_YEARS * 252)
     newdata.dropna(inplace=True)
 
     if self.next is None:
