@@ -228,6 +228,28 @@ class RateReturnOnly(NoModifier):
 IS_VERBOSE = False
 LOSSFN = "Huber"
 
+def fetch_data_with_cache(ticker: str, date_now: str) -> pd.DataFrame:
+    """Fetch data for given ticker, using cached file if available.
+    
+    Args:
+        ticker: Stock ticker symbol
+        date_now: Current date string in YYYY-MM-DD format
+        
+    Returns:
+        DataFrame with stock data
+    """
+    ticker_data_filename = os.path.join("data", f"{ticker}_{date_now}.csv")
+    if os.path.isfile(ticker_data_filename):
+        if IS_VERBOSE:
+            print(f"loading file {ticker_data_filename}")
+        data = pd.read_csv(ticker_data_filename, index_col=0)
+        data.index = pd.to_datetime(data.index)
+    else:
+        data = fetch_data(ticker)
+        data = data.round(5)
+        data.to_csv(f"{ticker_data_filename}")
+    return data
+
 def runModelCombined(tickers, name, modifier, do_train=True, loss=LOSSFN, output='adjclose', trading=NormalTrading):
   genpdata = PreparedData(name, output)
   genpdata.data = {}
@@ -243,19 +265,7 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss=LOSSFN, output
 
 
   for ticker in tickers:
-    ticker_data_filename = os.path.join("data", f"{ticker}_{date_now}.csv")
-    if os.path.isfile(ticker_data_filename):
-      if IS_VERBOSE:
-        print(f"loading file {ticker_data_filename}")
-      data = pd.read_csv(ticker_data_filename,index_col=0)
-      data.index =  pd.to_datetime(data.index)
-    else:
-      data = fetch_data(ticker)
-      data = data.round(3)
-      # save the dataframe
-      data.to_csv(f"{ticker_data_filename}")
-
-    # data = fetch_data(ticker)
+    data = fetch_data_with_cache(ticker, date_now)
     data = modifier.change_data(data)
     pdata = PreparedData(ticker, output)
     pdatas.append(pdata)
@@ -306,6 +316,8 @@ def runModelCombined(tickers, name, modifier, do_train=True, loss=LOSSFN, output
          'Buy': round(res.total_buy_profit,2),
          'Sell': round(res.total_sell_profit,2),
          'Total': round(res.total_profit,2),
+         'CurrentDate': res.last_date,
+         'PredictionDate': res.future_date,
          'Last': round(pdata.lastprice,2),
          'Pred': round(modifier.predicted_price(pdata, res),2),
          'Gain': round(modifier.predicted_gain(pdata, res),2)
@@ -324,7 +336,7 @@ def runModelCombinedVola(tickers, name, modifier, do_train=True, loss=LOSSFN, tr
     df=df.round(2)
 
     if target != 'adjclose':
-      df = df.drop(['Last'], axis=1)
+      df = df.drop(['Last', 'CurrentDate', 'PredictionDate'], axis=1)
       cols =  ['Error', 'Accu', 'Buy', 'Sell', 'Total', 'Pred', 'Gain']
       renamed = [f"{c}_{target[0]}" for c in cols]
       colmap = dict(zip(cols, renamed))

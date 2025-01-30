@@ -100,6 +100,8 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
     # last `lookup_step` columns contains NaN in future column
     # get them before droping NaNs
     last_sequence = np.array(df[feature_columns].tail(lookup_step))
+    # Get most current date from df
+    last_date = df.index[-1]
     # drop NaNs
     df.dropna(inplace=True)
     sequence_data = []
@@ -119,6 +121,7 @@ def load_data(ticker, n_steps, scale, shuffle, lookup_step, split_by_date,
     last_sequence = np.array(last_sequence).astype(np.float32)
     # add to result
     result['last_sequence'] = last_sequence
+    result['last_date'] = last_date
     # construct the X's and y's
     X, y = [], []
     for seq, target in sequence_data:
@@ -251,6 +254,11 @@ class TradingResult:
         self.loss = loss
         # predict the future price
         self.future_price = self.predict()
+        # Get the most recent date from final_df
+        self.last_date = self.data['last_date']
+        # Add LOOKUP_STEP of weekdays to the last date to get the future date
+        self.future_date = self.last_date + timedelta(days=self.pdata.LOOKUP_STEP*7//5)
+
 
     def do_trade(self, trade):
         final_df = self.final_df
@@ -321,8 +329,13 @@ class PreparedData:
 def fetch_data(ticker):
 # see if ticker is already a loaded stock from yahoo finance
     if isinstance(ticker, str):
-        # load it from yahoo_fin library
-        df = si.get_data(ticker)
+        # load it from yahoo_fin library, if ticker is not present in the library this will throw an exception
+        # Log and rethrow exception
+        try:
+            df = si.get_data(ticker)
+        except Exception as e:
+            print(f"Failed to fetch data for {ticker}")
+            raise e
         # Remove duplicates
         df = df[~df.index.duplicated(keep='first')]
     elif isinstance(ticker, pd.DataFrame):
