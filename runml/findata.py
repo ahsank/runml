@@ -23,6 +23,7 @@ G_SPLIT_BY_DATE = False
 G_TEST_SIZE = 0.3
 G_N_STEPS = 50
 G_MAX_TEST_YEAR = 3
+YF_HEADERS =  {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
 def prepare():
     # set seed, so we can get the same results after rerunning several times
@@ -332,7 +333,7 @@ def fetch_data(ticker):
         # load it from yahoo_fin library, if ticker is not present in the library this will throw an exception
         # Log and rethrow exception
         try:
-            df = si.get_data(ticker)
+            df = si.get_data(ticker, headers=YF_HEADERS)
         except Exception as e:
             print(f"Failed to fetch data for {ticker}")
             raise e
